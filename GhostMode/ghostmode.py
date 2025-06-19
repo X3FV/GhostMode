@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""
+GhostMode - Tor-Powered Command Execution Tool
+
+Usage:
+  ghostmode.py --tool "command"
+  ghostmode.py --new-ip
+  ghostmode.py --show-ip
+  ghostmode.py --check
+"""
+
 import argparse
 import os
 import subprocess
@@ -24,7 +34,7 @@ class GhostMode:
         )
         parser.add_argument(
             "--tool", 
-            help="Command/tool to run through Tor (e.g., 'sqlmap -u http://target.com?id=1 --batch')"
+            help="Command/tool to run through Tor (e.g., 'nmap -sS target.com')"
         )
         parser.add_argument(
             "--stealth", 
@@ -38,7 +48,7 @@ class GhostMode:
         parser.add_argument(
             "--check", 
             action="store_true",
-            help="Just check Tor and Proxychains configuration"
+            help="Verify Tor and Proxychains configuration only"
         )
         parser.add_argument(
             "--new-ip", 
@@ -73,7 +83,7 @@ class GhostMode:
                 )
                 return result.stdout.strip()
         except subprocess.CalledProcessError as e:
-            print(f"Command failed: {e.stderr}")
+            print(f"[!] Command failed: {e.stderr}")
             return None
 
     def check_tor(self):
@@ -84,9 +94,9 @@ class GhostMode:
             print("    On Fedora/RHEL: sudo dnf install tor")
             return False
 
-        # Check if Tor is running
+        # Check if Tor is running (fixed the unclosed parenthesis here)
         try:
-            socket.create_connection(("127.0.0.1", 9050), 2
+            socket.create_connection(("127.0.0.1", 9050), 2)
             print("[+] Tor is running")
             return True
         except (socket.error, ConnectionRefusedError):
@@ -107,7 +117,6 @@ class GhostMode:
         with open(self.proxychains_conf, 'r') as f:
             content = f.read()
 
-        # Check for required settings
         required = [
             "dynamic_chain",
             "socks5 127.0.0.1 9050",
@@ -116,14 +125,12 @@ class GhostMode:
 
         missing = [req for req in required if req not in content]
         if missing:
-            print(f"[-] Proxychains config missing required settings: {', '.join(missing)}")
-            print("    Please edit /etc/proxychains.conf and ensure these lines exist:")
-            print("    dynamic_chain")
-            print("    socks5 127.0.0.1 9050")
-            print("    proxy_dns")
+            print(f"[-] Proxychains config missing: {', '.join(missing)}")
+            print("    Add these to /etc/proxychains.conf:")
+            print("    dynamic_chain\n    socks5 127.0.0.1 9050\n    proxy_dns")
             return False
 
-        print("[+] Proxychains is properly configured")
+        print("[+] Proxychains configured correctly")
         return True
 
     def get_current_ip(self):
@@ -146,9 +153,8 @@ class GhostMode:
                 response = s.recv(1024)
                 if b"250" not in response:
                     print("[-] Tor control port authentication failed")
-                    print("    Ensure your torrc has:")
-                    print("    ControlPort 9051")
-                    print("    CookieAuthentication 0")
+                    print("    Ensure /etc/tor/torrc contains:")
+                    print("    ControlPort 9051\n    CookieAuthentication 0")
                     return False
 
                 s.sendall(b"SIGNAL NEWNYM\r\n")
@@ -161,7 +167,7 @@ class GhostMode:
                 time.sleep(5)  # Wait for circuit to establish
                 return True
         except Exception as e:
-            print(f"[-] Tor control port error: {str(e)}")
+            print(f"[-] Tor control error: {str(e)}")
             return False
 
     def log_session(self, command, ip=None):
@@ -178,19 +184,16 @@ class GhostMode:
             self.request_new_ip()
             self.get_current_ip()
 
-        print(f"[*] Executing through Tor: {tool_command}")
-        command = f"proxychains {tool_command}"
+        print(f"[*] Executing: {tool_command}")
         self.log_session(tool_command)
-        
-        # Run the command interactively to allow for user input if needed
-        os.system(command)
+        os.system(f"proxychains {tool_command}")
 
     def main(self):
         args = self.parse_arguments()
         
         if args.log:
             self.log_file = args.log
-            print(f"[*] Logging session to {self.log_file}")
+            print(f"[*] Logging to {self.log_file}")
             
         self.stealth_mode = args.stealth
 
